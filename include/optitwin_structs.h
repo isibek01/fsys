@@ -29,6 +29,7 @@
 
 #define MAX_STRING			512
 #define MAX_VARS			100
+#define MAX_D_VARS			6
 #define SOCKETPORT			"12589"
 #define APP_ID				0X0F71
 
@@ -38,17 +39,19 @@
 #ifndef TRUE
 #define TRUE                1
 #endif
+
 /*----------------------------------------------------------------------------------------*/
 /*                               TIPOS													  */
 /*----------------------------------------------------------------------------------------*/
 typedef int                 BOOL;
 
 typedef struct datos_st {
-    FSYS_varHnd_t var[MAX_VARS];
+	FSYS_varHnd_t var[MAX_VARS];
 }datos_t;
 
 typedef struct valores_st {
-    double var[MAX_VARS];
+	double vard[MAX_VARS];
+	float varf[MAX_VARS];
 }valores_t;
 
 typedef struct var_info_st {
@@ -66,7 +69,8 @@ struct EventInfo_st {
 	unsigned long		nScan;	//Identificacin - Nmero de scan del evento
 	//unsigned long		date; //Fecha del evento
 	union v_u {
-		double iValue;				//Valor entero de la variables monitorizada
+		double dValue;				//Valor entero de la variables monitorizada
+		float fValue;
 	} v[MAX_VARS];
 }EventInfo_t;
 

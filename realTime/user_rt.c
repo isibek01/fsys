@@ -1,7 +1,7 @@
 /*******************************************************************************************
 *                              NOMBREFICH												   *
 ********************************************************************************************
-* AUTOR:			Fagor Automation 
+* AUTOR:			Fagor Automation
 * DESCRIPCION:		Example of user real time code
 * IMPLEMENTACION:
 * MODIFICACIONES:
@@ -28,6 +28,15 @@
 /*----------------------------------------------------------------------------------------*/
 /*                             CONSTANTES												  */
 /*----------------------------------------------------------------------------------------*/
+
+const wchar_t* varDNames[MAX_D_VARS] = {
+	_T("A.ATIPPOS.X"),
+	_T("A.ATIPPOS.Y"),
+	_T("A.ATIPPOS.Z"),
+	_T("A.POS.S"),
+	_T("A.SREAL.S"),
+	_T("G.FREAL")
+};
 
 /*----------------------------------------------------------------------------------------*/
 /*                               TIPOS													  */
@@ -102,6 +111,7 @@ int InputEnable = -1;
 int InputClose = -1;
 
 int i;
+int j;
 
 const wchar_t driverName[] = L"V" SOLUTION_NAME L"D";
 unsigned long RTnscans = 0;
@@ -115,11 +125,11 @@ unsigned long RTnscans = 0;
 /* -----------------------------------------------------------------------------------------
  * -- Description:			It is called once every time the cyclic proccess is going to
  *							start.
- * -- Parameters: 
+ * -- Parameters:
  * -- Returned Value:		return code
  * -- Assumptions:			No real time.
- * -- Postconditions: 
- * -- Implementation: 
+ * -- Postconditions:
+ * -- Implementation:
  */
 fmmRetCode_t FMM_initialize(void) {
 	InputEnable = 0;
@@ -129,13 +139,13 @@ fmmRetCode_t FMM_initialize(void) {
 }
 
 /* -----------------------------------------------------------------------------------------
- * -- Description:			When the cyclic proccess is running, it is called every cycle 
+ * -- Description:			When the cyclic proccess is running, it is called every cycle
  *							before the step function.
- * -- Parameters: 
+ * -- Parameters:
  * -- Returned Value:		return code
  * -- Assumptions:			Real time.
- * -- Postconditions: 
- * -- Implementation: 
+ * -- Postconditions:
+ * -- Implementation:
  */
 fmmRetCode_t FMM_readInputs(void) {
 	//lectura de las variables. Ojo los drivers deben estar inicialziados desde la aplicacion
@@ -147,21 +157,38 @@ fmmRetCode_t FMM_readInputs(void) {
 		for (i = 0; i < MAX_VARS; ++i) {
 			if (vars.var[i].varName != NULL && //Si la variable está definida y
 				vars.var[i].varName != '\0') { //Si la variable no es vacia (Since C-style strings are always terminated with the null character '\0')
-				FSYS_ReadVariable(&(varStruct.var[i]), &(valoresStruct.var[i]), sizeof(valoresStruct.var[i]));
+				j = 0;
+				int isDouble = 0;
+				do {
+					//TODO if var es double c 
+					if (wcscmp(vars.var[j].varName, varDNames[j]) == 0) {
+						FSYS_ReadVariable(&(varStruct.var[i]), &(valoresStruct.vard[i]), sizeof(valoresStruct.vard[i]));
+						valoresStruct.varf[i] = 0;
+						isDouble = 1;
+					}
+					j++;
+				} while (j < MAX_D_VARS && isDouble == 0);
+
+				//else es float
+				if (!isDouble)
+				{
+					FSYS_ReadVariable(&(varStruct.var[i]), &(valoresStruct.varf[i]), sizeof(valoresStruct.varf[i]));
+					valoresStruct.vard[i] = 0;
+				}
 			}
 		}
 	}
-	
+
 	return(FMM_RET_CODE_OK);
 }
 
 /* -----------------------------------------------------------------------------------------
  * -- Description:			It is called every cicle when the cyclic proccess is running
- * -- Parameters: 
+ * -- Parameters:
  * -- Returned Value:		return code
  * -- Assumptions:			Real time.
- * -- Postconditions: 
- * -- Implementation: 
+ * -- Postconditions:
+ * -- Implementation:
  */
 fmmRetCode_t FMM_step(void) {  //algoritmo
 	//Output1 = Input1 + Input2;
@@ -172,11 +199,11 @@ fmmRetCode_t FMM_step(void) {  //algoritmo
 /* -----------------------------------------------------------------------------------------
  * -- Description:			When the cyclic proccess is running, it is called every cycle
  *							after the step function.
- * -- Parameters: 
+ * -- Parameters:
  * -- Returned Value:		return code
  * -- Assumptions:			Real time.
- * -- Postconditions: 
- * -- Implementation: 
+ * -- Postconditions:
+ * -- Implementation:
  */
 fmmRetCode_t FMM_writeOutputs(void) {
 	FSYS_retCode_t ringWriteReturnCode = FSYS_RET_CODE_OK;
@@ -199,7 +226,9 @@ fmmRetCode_t FMM_writeOutputs(void) {
 				vars.var[i].varName != '\0' &&
 				wcslen(vars.var[i].varName) > 0) //Si la variable no es vacia (Since C-style strings are always terminated with the null character '\0')
 			{
-				event.v[i].iValue = valoresStruct.var[i];
+				event.v[i].dValue = valoresStruct.vard[i];
+				event.v[i].fValue = valoresStruct.varf[i];
+
 				++numElements;
 			}
 			else
@@ -220,11 +249,11 @@ fmmRetCode_t FMM_writeOutputs(void) {
 
 /* -----------------------------------------------------------------------------------------
  * -- Description:			It is called once when the cyclic proccess is stopped.
- * -- Parameters: 
+ * -- Parameters:
  * -- Returned Value:		return code
  * -- Assumptions:			No real time.
- * -- Postconditions: 
- * -- Implementation: 
+ * -- Postconditions:
+ * -- Implementation:
  */
 fmmRetCode_t FMM_terminate(void) {
 	return(FMM_RET_CODE_OK);

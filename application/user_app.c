@@ -26,6 +26,14 @@
 /*----------------------------------------------------------------------------------------*/
 const wchar_t driverName[] = L"V" SOLUTION_NAME L"D";
 #define ESCAPE_KEY				27
+const wchar_t* varDNames[MAX_D_VARS] = {
+	_T("A.ATIPPOS.X"),
+	_T("A.ATIPPOS.Y"),
+	_T("A.ATIPPOS.Z"),
+	_T("A.POS.S"),
+	_T("A.SREAL.S"),
+	_T("G.FREAL")
+};
 
 /*----------------------------------------------------------------------------------------*/
 /*                               TIPOS													  */
@@ -64,8 +72,8 @@ SOCKADDR_IN server_address;
 /*----------------------------------------------------------------------------------------*/
 /*              PROTOTIPOS DE FUNCIONES Y MACROS LOCALES								  */
 /*----------------------------------------------------------------------------------------*/
-int				keyboardHitGet						(void);
-fmmRetCode_t	getConfig							(TCHAR* pConfigFileName, BOOL isSimu);
+int				keyboardHitGet(void);
+fmmRetCode_t	getConfig(TCHAR* pConfigFileName, BOOL isSimu);
 /*----------------------------------------------------------------------------------------*/
 /*                         FUNCIONES PUBLICAS											  */
 /*----------------------------------------------------------------------------------------*/
@@ -77,16 +85,16 @@ fmmRetCode_t	getConfig							(TCHAR* pConfigFileName, BOOL isSimu);
 						pCtrl: pointer to a control variable
 							when the value pointed by pCtrl is FSYS_APP_CTRL_STOP
 							rutine should end and return to the caller
- * -- Returned Value: 
- * -- Asunciones: 
- * -- Postconditions: 
- * -- Implementation: 
+ * -- Returned Value:
+ * -- Asunciones:
+ * -- Postconditions:
+ * -- Implementation:
  */
-FAGOR_LINK_FMM int main(int argc, _TCHAR * argv[], FSYS_applicationControl_t * pCtrl) {
+FAGOR_LINK_FMM int main(int argc, _TCHAR* argv[], FSYS_applicationControl_t* pCtrl) {
 	int keyboardChar = 0;
 
 	printf("===================================\nStart App\n===================================\n");
-	 
+
 	fmmRetCode_t isError;
 	struct datos_st pDatos = FSYS_VOID_VAR_HND;
 	int i;
@@ -182,15 +190,15 @@ FAGOR_LINK_FMM int main(int argc, _TCHAR * argv[], FSYS_applicationControl_t * p
 	retCode = FSYS_WriteVariableEx(L"hndInputClose", &hndRdClose, sizeof(hndRdClose));
 	//retCode = FSYS_WriteVariableEx(L"hndOutputVB", &hndWrVB, sizeof(hndWrVB));
 	retCode = FSYS_WriteVariableEx(L"hndOutputWarning", &hndWrWarn, sizeof(hndWrWarn));
-	
+
 	//inicializamos el tiempo real
 	FMM_StartRealTime();
-	
+
 	//Definimos una manera de salir de la aplicación 
 	//para que se cierren los handlers con la tecla escape
 	//como está hecho en el datalogger
 	printf("\nPress ESCAPE to exit.");
-	while(escapePressed == 0 && retStatus != FMM_STATUS_CLOSING)
+	while (escapePressed == 0 && retStatus != FMM_STATUS_CLOSING)
 	{
 		keyboardChar = keyboardHitGet();
 		if (keyboardChar == ESCAPE_KEY)
@@ -234,15 +242,37 @@ FAGOR_LINK_FMM int main(int argc, _TCHAR * argv[], FSYS_applicationControl_t * p
 										fprintf(csvFile, ",%ws", vars.var[j].varName);  // Add headers for variable names
 									}
 								}
+
 							}
 							// Append to CSV file
 							fprintf(csvFile, "\n%u", rxInfo.infoRxViaPipe[i].nScan);
 							for (int j = 0; j < MAX_VARS; j++) {
-								if (vars.var[j].varName != NULL && vars.var[j].varName != '\0' && wcslen(vars.var[j].varName) > 0) {
-									printf(" %f", rxInfo.infoRxViaPipe[i].v[j].iValue);
+								if (vars.var[j].varName != NULL && vars.var[j].varName != '\0' && wcslen(vars.var[j].varName) > 0)
+								{
+									printf(" %ws:", vars.var[j].varName);
+									//TODO
+									//if(vars.var[i].varName es double)
+									int k = 0;
+									int isDouble = 0;
+									do {
+										if (wcscmp(vars.var[j].varName, varDNames[k]) == 0) {
+											printf("La variable %s es double con valor %f", vars.var[j].varName, rxInfo.infoRxViaPipe[i].v[j].dValue);
+											printf(" %f", rxInfo.infoRxViaPipe[i].v[j].dValue);
+											// Append to CSV file
+											fprintf(csvFile, ",%f", rxInfo.infoRxViaPipe[i].v[j].dValue);
+											isDouble = 1;
+										}
+										k++;
+									} while (k < MAX_D_VARS && isDouble == 0);
 
-									// Append to CSV file
-									fprintf(csvFile, ",%f", rxInfo.infoRxViaPipe[i].v[j].iValue);
+									if (!isDouble)
+									{
+										printf("La variable %s es double con valor %f", vars.var[j].varName, rxInfo.infoRxViaPipe[i].v[j].fValue);
+										printf(" %f", rxInfo.infoRxViaPipe[i].v[j].fValue);
+										// Append to CSV file
+										fprintf(csvFile, ",%f", rxInfo.infoRxViaPipe[i].v[j].fValue);
+									}
+
 								}
 							}
 						}
@@ -257,7 +287,8 @@ FAGOR_LINK_FMM int main(int argc, _TCHAR * argv[], FSYS_applicationControl_t * p
 					}
 					else {
 						printf("\nERROR: wrong app id. Possible buffer overflow - ");
-						printf("AppId %x Scan Number %u: %f", rxInfo.infoRxViaPipe[i].appId, rxInfo.infoRxViaPipe[i].nScan, rxInfo.infoRxViaPipe[i].v[0].iValue);
+						//
+						printf("AppId %x Scan Number %u: %f", rxInfo.infoRxViaPipe[i].appId, rxInfo.infoRxViaPipe[i].nScan, rxInfo.infoRxViaPipe[i].v[0].fValue);
 						if (csvFile != NULL)
 						{
 							fclose(csvFile);  // Close the CSV file
@@ -313,10 +344,10 @@ FAGOR_LINK_FMM int main(int argc, _TCHAR * argv[], FSYS_applicationControl_t * p
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////
 int keyboardHitGet()
 {
-    if (_kbhit())			//Detecta pulsacion teclado
-        return _getch();	//Devuelve tecla pulsada
-    else
-        return -1;
+	if (_kbhit())			//Detecta pulsacion teclado
+		return _getch();	//Devuelve tecla pulsada
+	else
+		return -1;
 }
 
 int getDate()
