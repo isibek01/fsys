@@ -1,0 +1,279 @@
+/*******************************************************************************************
+*                              NOMBREFICH												   *
+********************************************************************************************
+* AUTOR:
+*
+* DESCRIPCION:		Example of user real time code
+* 
+* IMPLEMENTACION:
+* 
+* MODIFICACIONES:
+*
+*******************************************************************************************/
+
+/*----------------------------------------------------------------------------------------*/
+/*                              INCLUDES												  */
+/*----------------------------------------------------------------------------------------*/
+#include <tchar.h>
+#include "fsys.h"
+#include "FMM_interface.h"
+#include <math.h>
+
+/*----------------------------------------------------------------------------------------*/
+/*                             CONSTANTES												  */
+/*----------------------------------------------------------------------------------------*/
+
+/*----------------------------------------------------------------------------------------*/
+/*                               TIPOS													  */
+/*----------------------------------------------------------------------------------------*/
+
+typedef struct EstadosAnteriores_st{
+	double UnoAnterior;
+	double DosAnterior;
+}EstadosAnteriores_t;
+
+/*----------------------------------------------------------------------------------------*/
+/*                             VARIABLES												  */
+/*----------------------------------------------------------------------------------------*/
+static FSYS_varHnd_t hndInputAcel = FSYS_VOID_VAR_HND;
+static FSYS_varHnd_t hndGanancia = FSYS_VOID_VAR_HND;
+static FSYS_varHnd_t hndFrecuencia = FSYS_VOID_VAR_HND;
+static FSYS_varHnd_t hndOutput = FSYS_VOID_VAR_HND;
+static FSYS_varHnd_t hndAcelInputWr = FSYS_VOID_VAR_HND;
+static FSYS_varHnd_t hndAcelUnidadesFisicas = FSYS_VOID_VAR_HND;
+static FSYS_varHnd_t hndAcelFiltrada = FSYS_VOID_VAR_HND;
+static FSYS_varHnd_t hndAcelFiltradaUmbral = FSYS_VOID_VAR_HND;
+static FSYS_varHnd_t hndOutputUmbral = FSYS_VOID_VAR_HND;
+
+int InputAcel = 0;
+int Ganancia = 0;
+int Frecuencia = 0;
+int OutputControl = 0;
+double samplingTime = 0.002; //Tiempo de ciclo en s
+double AcelUnidadesFisicas = 0.0;
+double AcelFiltrada = 0.0;
+double AcelFiltradaUmbral = 0.0;
+int OutputAcelUnidadesFisicas = 0;
+int OutputAcelFiltrada = 0;
+int OutputAcelFiltradaUmbral = 0;
+int OutputControlUmbral = 0;
+static EstadosAnteriores_t EstadosFiltro;
+
+const wchar_t driverName[] = L"V" SOLUTION_NAME L"D";
+/*----------------------------------------------------------------------------------------*/
+/*              PROTOTIPOS DE FUNCIONES Y MACROS LOCALES								  */
+/*----------------------------------------------------------------------------------------*/
+double Contaje2Acel(int input);
+double FiltroPasaBajos(double input, int Frecuencia, EstadosAnteriores_t* pEstados);
+
+/*----------------------------------------------------------------------------------------*/
+/*                         FUNCIONES PUBLICAS											  */
+/*----------------------------------------------------------------------------------------*/
+/* -----------------------------------------------------------------------------------------
+ * -- Description:			It is called once every time the cyclic proccess is going to
+ *							start.
+ * -- Parameters: 
+ * -- Returned Value:		return code
+ * -- Assumptions:			No real time.
+ * -- Postconditions: 
+ * -- Implementation: 
+ */
+fmmRetCode_t FMM_initialize(void)
+{
+	InputAcel = 0;
+	Ganancia = 0;
+	Frecuencia = 0;
+	AcelUnidadesFisicas = 0.0;
+	AcelFiltrada = 0.0;
+	AcelFiltradaUmbral = 0.0;
+	OutputControl = 0;
+	EstadosFiltro.DosAnterior = 0.0;
+	EstadosFiltro.UnoAnterior = 0.0;
+	OutputAcelUnidadesFisicas = 0;
+	OutputAcelFiltrada = 0;
+	OutputAcelFiltradaUmbral = 0;
+	OutputControlUmbral = 0;
+
+	return(FMM_RET_CODE_OK);
+}
+
+/* -----------------------------------------------------------------------------------------
+ * -- Description:			When the cyclic proccess is running, it is called every cycle 
+ *							before the step function.
+ * -- Parameters: 
+ * -- Returned Value:		return code
+ * -- Assumptions:			Real time.
+ * -- Postconditions: 
+ * -- Implementation: 
+ */
+fmmRetCode_t FMM_readInputs(void)
+{
+	//lectura de las variables. Ojo los drivers deben estar inicialziados desde la aplicacion
+	FSYS_ReadVariable(&hndInputAcel, &InputAcel, sizeof(InputAcel));
+	FSYS_ReadVariable(&hndGanancia, &Ganancia, sizeof(Ganancia));
+	FSYS_ReadVariable(&hndFrecuencia, &Frecuencia, sizeof(Frecuencia));
+	
+	return(FMM_RET_CODE_OK);
+}
+
+double Contaje2Acel(int input)
+{
+	double Resistencia, x_zero, acel_mA, acel_g;
+	double nbits_regulador = 15;
+	double output;
+
+	Resistencia = (61.9*120)/(61.9+120);
+    x_zero = 0.012*Resistencia*pow(2,nbits_regulador);
+    acel_mA = -(input-x_zero)*1000/(Resistencia*pow(2,nbits_regulador));
+	acel_g = acel_mA / 16; 
+    output = acel_g * 9.81 * 1000;
+	return(output);
+}
+
+double FiltroPasaBajos(double input, int Frecuencia, EstadosAnteriores_t* pEstados)
+{
+	double tmp_cos,tmp_sin;
+	double wn = Frecuencia*2*3.14159265; // Frecuencia de corte en rad/s
+	double b1, b2, b3, a1, a2, inva3;
+	double output;
+
+	tmp_cos = cos(samplingTime * wn);
+	tmp_sin = sin(samplingTime * wn);
+
+	b1 = 1-tmp_cos;
+	b2 = 2-2*tmp_cos;
+	b3 = b1;
+	a1 = 2-1.41421356*tmp_sin;
+	a2 = -4*tmp_cos;
+	inva3 = 1/(2+1.41421356*tmp_sin);
+
+	if (Frecuencia==0)
+	{
+		b1 = 0.0;
+		b2 = 0.0;
+		b3 = 1.0;
+		a1 = 0.0;
+		a2 = 0.0;
+		inva3 = 1.0;
+	}	
+
+	output = (pEstados->UnoAnterior + input * b3) * inva3;
+	pEstados->UnoAnterior = input * b2 - output * a2 + pEstados->DosAnterior;
+	pEstados->DosAnterior = input * b1 - output * a1;
+
+	return(output);
+}
+
+
+/* -----------------------------------------------------------------------------------------
+ * -- Description:			It is called every cicle when the cyclic proccess is running
+ * -- Parameters: 
+ * -- Returned Value:		return code
+ * -- Assumptions:			Real time.
+ * -- Postconditions: 
+ * -- Implementation: 
+ */
+fmmRetCode_t FMM_step(void)  //algoritmo
+{
+	double AceleracionMin;
+	double SalidaSinUmbral, SalidaUmbral;
+<<<<<<< working copy
+	double MP24, NP1, Inercia, RelacionMecanica, Acel2Nm;
+
+	// Aceleración por debajo de la cual se considera 0
+	AceleracionMin = 300; // Unidades: mm/s2
+	
+	// Lectura de señal del acelerómetro
+	AcelUnidadesFisicas = Contaje2Acel(InputAcel);
+
+	// Filtrar señal
+	AcelFiltrada = FiltroPasaBajos(AcelUnidadesFisicas, Frecuencia, &EstadosFiltro);
+	AcelFiltradaUmbral = AcelFiltrada;
+
+	if ((AcelFiltrada > 0.0) && (AcelFiltrada < AceleracionMin))
+		AcelFiltradaUmbral = 0.0;
+
+	if ((AcelFiltrada < 0.0) && (AcelFiltrada > -AceleracionMin))
+		AcelFiltradaUmbral = 0.0;
+
+	MP24 = 2.9; //Kg*cm2
+	NP1 = 144.61;
+	Inercia = MP24/10000 * ( 1+0.01*NP1);
+	RelacionMecanica = 20*2/3; //Pitch*Outputrev/Inputrev
+	Acel2Nm = Inercia * RelacionMecanica / (2*3.14159265); //mm/s2 --> Nm
+
+	SalidaUmbral = AcelFiltradaUmbral * Acel2Nm * (-Ganancia)/1000;
+	SalidaSinUmbral = AcelFiltrada * Acel2Nm  * (-Ganancia)/1000;
+=======
+
+	// Aceleración por debajo de la cual se considera 0
+	AceleracionMin = 300; // Unidades: mm/s2
+	
+	// Lectura de señal del acelerómetro
+	AcelUnidadesFisicas = Contaje2Acel(InputAcel);
+
+	// Filtrar señal
+	AcelFiltrada = FiltroPasaBajos(AcelUnidadesFisicas, Frecuencia, &EstadosFiltro);
+	AcelFiltradaUmbral = AcelFiltrada;
+
+	if ((AcelFiltrada > 0.0) && (AcelFiltrada < AceleracionMin))
+		AcelFiltradaUmbral = 0.0;
+
+	if ((AcelFiltrada < 0.0) && (AcelFiltrada > -AceleracionMin))
+		AcelFiltradaUmbral = 0.0;
+
+	SalidaUmbral = AcelFiltradaUmbral * (-Ganancia)/1000;
+	SalidaSinUmbral = AcelFiltrada * (-Ganancia)/1000;
+>>>>>>> destination
+
+	OutputControl = (long long)SalidaSinUmbral;
+	OutputAcelUnidadesFisicas = (long long)AcelUnidadesFisicas;
+	OutputAcelFiltrada = (long long)AcelFiltrada;
+	OutputAcelFiltradaUmbral = (long long)AcelFiltradaUmbral;
+	OutputControlUmbral = (long long)SalidaUmbral;
+
+	return(FMM_RET_CODE_OK);
+}
+
+/* -----------------------------------------------------------------------------------------
+ * -- Description:			When the cyclic proccess is running, it is called every cycle
+ *							after the step function.
+ * -- Parameters: 
+ * -- Returned Value:		return code
+ * -- Assumptions:			Real time.
+ * -- Postconditions: 
+ * -- Implementation: 
+ */
+fmmRetCode_t FMM_writeOutputs(void)
+{
+	
+	//escritura del resultado del algoritmo
+	FSYS_WriteVariable(&hndOutput, &OutputControl, sizeof(OutputControl));
+	FSYS_WriteVariable(&hndAcelInputWr, &InputAcel, sizeof(InputAcel));
+	FSYS_WriteVariable(&hndAcelUnidadesFisicas, &OutputAcelUnidadesFisicas, sizeof(OutputAcelUnidadesFisicas));
+	FSYS_WriteVariable(&hndAcelFiltrada, &OutputAcelFiltrada, sizeof(OutputAcelFiltrada));
+	FSYS_WriteVariable(&hndAcelFiltradaUmbral, &OutputAcelFiltradaUmbral, sizeof(OutputAcelFiltradaUmbral));
+	FSYS_WriteVariable(&hndOutputUmbral, &OutputControlUmbral, sizeof(OutputControlUmbral));
+	
+	return(FMM_RET_CODE_OK);
+}
+
+/* -----------------------------------------------------------------------------------------
+ * -- Description:			It is called once when the cyclic proccess is stopped.
+ * -- Parameters: 
+ * -- Returned Value:		return code
+ * -- Assumptions:			No real time.
+ * -- Postconditions: 
+ * -- Implementation: 
+ */
+fmmRetCode_t FMM_terminate(void)
+{
+	return(FMM_RET_CODE_OK);
+}
+/*----------------------------------------------------------------------------------------*/
+/*                         FUNCIONES LOCALES											  */
+/*----------------------------------------------------------------------------------------*/
+
+/******************************************************************************************/
+/*                                FIN						                              */
+/******************************************************************************************/

@@ -1,0 +1,128 @@
+﻿/*******************************************************************************************
+*                              NOMBREFICH												   *
+********************************************************************************************
+* AUTOR:
+*
+* DESCRIPCION:			Example of user application code
+* 
+* IMPLEMENTACION:
+* 
+* MODIFICACIONES:
+*
+*******************************************************************************************/
+
+/*----------------------------------------------------------------------------------------*/
+/*                              INCLUDES												  */
+/*----------------------------------------------------------------------------------------*/
+#include <tchar.h>
+#include "fsys.h"
+#include "fmm_interface.h"
+<<<<<<< working copy
+//#include <math.h>
+=======
+>>>>>>> destination
+
+#include <stdio.h>
+#include <conio.h>			//getch y _kbhit
+/*----------------------------------------------------------------------------------------*/
+/*                             CONSTANTES												  */
+/*----------------------------------------------------------------------------------------*/
+const wchar_t driverName[] = L"V" SOLUTION_NAME L"D";
+#define ESCAPE_KEY				27
+/*----------------------------------------------------------------------------------------*/
+/*                               TIPOS													  */
+/*----------------------------------------------------------------------------------------*/
+
+/*----------------------------------------------------------------------------------------*/
+/*                             VARIABLES												  */
+/*----------------------------------------------------------------------------------------*/
+
+/*----------------------------------------------------------------------------------------*/
+/*              PROTOTIPOS DE FUNCIONES Y MACROS LOCALES								  */
+/*----------------------------------------------------------------------------------------*/
+int				keyboardHitGet						(void);
+/*----------------------------------------------------------------------------------------*/
+/*                         FUNCIONES PUBLICAS											  */
+/*----------------------------------------------------------------------------------------*/
+
+/* -----------------------------------------------------------------------------------------
+ * -- Description:		Entry point of the application
+ * -- Parameters:		argc: number of arguments
+						argv: array of pointer pointing to the arguments
+						pCtrl: pointer to a control variable
+							when the value pointed by pCtrl is FSYS_APP_CTRL_STOP
+							rutine should end and return to the caller
+ * -- Returned Value: 
+ * -- Asunciones: 
+ * -- Postconditions: 
+ * -- Implementation: 
+ */
+FAGOR_LINK_FMM int main(int argc, _TCHAR * argv[], FSYS_applicationControl_t * pCtrl)
+{
+	int escapePressed = 0;
+	int keyboardChar = 0;
+	int counter = 100000000;
+	FSYS_varHnd_t hndRd1 = FSYS_VOID_VAR_HND;
+	FSYS_varHnd_t hndRd2 = FSYS_VOID_VAR_HND;
+	FSYS_varHnd_t hndWr1 = FSYS_VOID_VAR_HND;
+	FSYS_VarRdWr_t rd = FSYS_VAR_OPEN_FOR_READING;
+	FSYS_VarRdWr_t wr = FSYS_VAR_OPEN_FOR_WRITTING;
+	int retCode = 0;
+	FMM_InitializaRealTime();
+
+	//abrimos las variables de lectura. solo se puede abrir desde aplicacion
+	retCode = FSYS_OpenVariable(&hndRd1, L"DRV.GV51.X", rd);
+	retCode = FSYS_OpenVariable(&hndRd2, L"DRV.GV52.X", rd);
+	//Abrimos la variable de escritura, solo se puede abrir desde aplicacion
+	retCode = FSYS_OpenVariable(&hndWr1, L"PLC.R[950]", wr);
+
+	//escribimos los handlers obtenidos anteriormente en el driver de usuario
+	//para que el driver ejectue las lecturas y escrituras
+	retCode = FSYS_WriteVariableEx(L"hndGV51", &hndRd1, sizeof(hndRd1));
+	retCode = FSYS_WriteVariableEx(L"hndGV52", &hndRd2, sizeof(hndRd1));
+	retCode = FSYS_WriteVariableEx(L"hndR950", &hndWr1, sizeof(hndRd1));
+
+	//inicializamos el tiempo real
+	FMM_StartRealTime();
+	
+	//nos inventamos una manera de salir de la aplicación 
+	//para que se cierren los handlers
+	//Una forma más elegante sería con la tecla escape
+	//esta hecho en el datalogger
+	printf("\nPress ESCAPE to exit.");
+	while(escapePressed == 0)
+	{
+		keyboardChar = keyboardHitGet();
+		if(keyboardChar == ESCAPE_KEY)
+			escapePressed = 1;
+	}
+	
+	FMM_StopRealTime();
+	FMM_TerminateRealTime();
+	
+	FSYS_CloseVariable(&hndRd1);
+	FSYS_CloseVariable(&hndRd2);
+	FSYS_CloseVariable(&hndWr1);
+	return(0);
+}
+
+/*----------------------------------------------------------------------------------------*/
+/*                         FUNCIONES LOCALES											  */
+/*----------------------------------------------------------------------------------------*/
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//FUNCION no bloqueante que lee un caracter pulsado desde el teclado
+//Parámetros entrada.						
+//Parámetros salida				caracter ASCII pulsado en teclado. TECLA ESCAPE = 27
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////
+int keyboardHitGet()
+{
+    if (_kbhit())			//Detecta pulsacion teclado
+        return _getch();	//Devuelve tecla pulsada
+    else
+        return -1;
+}
+
+/******************************************************************************************/
+/*                                FIN						                              */
+/******************************************************************************************/
